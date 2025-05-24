@@ -80,6 +80,7 @@ class PrefixCachingBlockAllocator(BlockAllocator):
         block_size: int,
         block_ids: Optional[Iterable[int]] = None,
         eviction_policy: EvictionPolicy = EvictionPolicy.LRU,
+        caching_low_priority_last_num_tokens: int = 0,
     ):
         if block_ids is None:
             block_ids = range(num_blocks)
@@ -131,6 +132,8 @@ class PrefixCachingBlockAllocator(BlockAllocator):
 
         self.metric_data = CacheMetricData()
 
+        self.caching_low_priority_last_num_tokens = caching_low_priority_last_num_tokens
+
     def _create_block(
         self,
         prev_block: Optional[Block],
@@ -153,6 +156,7 @@ class PrefixCachingBlockAllocator(BlockAllocator):
             computed=computed,
             extra_hash=extra_hash,
         )
+
 
     def allocate_immutable_block(self,
                                  prev_block: Optional[Block],
@@ -568,7 +572,10 @@ class PrefixCachingBlockAllocator(BlockAllocator):
         info in evictor's metadata.
         """
 
-        for block_id in block_ids:
+        num_low_priority_blocks = self.caching_low_priority_last_num_tokens // self._block_size
+        if len(block_ids) <= num_low_priority_blocks:
+            return
+        for block_id in block_ids[:-num_low_priority_blocks]:
             if self._block_tracker[block_id].active:
                 self._block_tracker[block_id].last_accessed = now
             elif block_id in self.evictor:

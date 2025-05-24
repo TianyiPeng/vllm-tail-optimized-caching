@@ -28,6 +28,7 @@ class CpuGpuBlockAllocator(DeviceAwareBlockAllocator):
         num_gpu_blocks: int,
         num_cpu_blocks: int,
         block_size: int,
+        caching_low_priority_last_num_tokens: int = 0,
     ) -> DeviceAwareBlockAllocator:
         """Creates a CpuGpuBlockAllocator instance with the specified
         configuration.
@@ -46,6 +47,8 @@ class CpuGpuBlockAllocator(DeviceAwareBlockAllocator):
             num_cpu_blocks (int): The number of blocks to allocate for CPU
                 memory.
             block_size (int): The size of each block in number of tokens.
+            caching_low_priority_last_num_tokens (int): The number of tokens in the
+                low priority cache for prefix caching blocks.
 
         Returns:
             DeviceAwareBlockAllocator: A CpuGpuBlockAllocator instance with the
@@ -82,12 +85,14 @@ class CpuGpuBlockAllocator(DeviceAwareBlockAllocator):
                 num_blocks=num_gpu_blocks,
                 block_size=block_size,
                 block_ids=gpu_block_ids,
+                caching_low_priority_last_num_tokens=caching_low_priority_last_num_tokens,
             )
 
             cpu_allocator = PrefixCachingBlockAllocator(
                 num_blocks=num_cpu_blocks,
                 block_size=block_size,
                 block_ids=cpu_block_ids,
+                caching_low_priority_last_num_tokens=caching_low_priority_last_num_tokens,
             )
         else:
             raise ValueError(f"Unknown allocator type {allocator_type=}")

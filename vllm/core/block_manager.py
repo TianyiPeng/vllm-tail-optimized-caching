@@ -56,6 +56,9 @@ class SelfAttnBlockSpaceManager(BlockSpaceManager):
             window. Defaults to None.
         enable_caching (bool, optional): Flag indicating whether caching is
             enabled. Defaults to False.
+        caching_low_priority_last_num_tokens (int, optional): The number of tokens
+            at the end of a sequence to be considered low priority for caching.
+            Defaults to 0.
     """
 
     def __init__(
@@ -66,10 +69,12 @@ class SelfAttnBlockSpaceManager(BlockSpaceManager):
         watermark: float = 0.01,
         sliding_window: Optional[int] = None,
         enable_caching: bool = False,
+        caching_low_priority_last_num_tokens: int = 0,
     ) -> None:
         self.block_size = block_size
         self.num_total_gpu_blocks = num_gpu_blocks
         self.num_total_cpu_blocks = num_cpu_blocks
+        self.caching_low_priority_last_num_tokens = caching_low_priority_last_num_tokens
 
         self.sliding_window = sliding_window
         # max_block_sliding_window is the max number of blocks that need to be
@@ -91,12 +96,18 @@ class SelfAttnBlockSpaceManager(BlockSpaceManager):
 
         self.watermark_blocks = int(watermark * num_gpu_blocks)
 
+        if enable_caching:
+            if caching_low_priority_last_num_tokens % block_size != 0:
+                raise ValueError("caching_low_priority_last_num_tokens must be a multiple of block_size")
+
         self.block_allocator = CpuGpuBlockAllocator.create(
             allocator_type="prefix_caching" if enable_caching else "naive",
             num_gpu_blocks=num_gpu_blocks,
             num_cpu_blocks=num_cpu_blocks,
             block_size=block_size,
+            caching_low_priority_last_num_tokens=caching_low_priority_last_num_tokens,
         )
+
 
         self.block_tables: Dict[SeqId, BlockTable] = {}
         self.cross_block_tables: Dict[EncoderSeqId, BlockTable] = {}
@@ -163,40 +174,43 @@ class SelfAttnBlockSpaceManager(BlockSpaceManager):
         return block_table
 
     def allocate(self, seq_group: SequenceGroup) -> None:
-
-        # Allocate self-attention block tables for decoder sequences
+        # Get all sequences in the group that are waiting to be scheduled (not running or finished).
         waiting_seqs = seq_group.get_seqs(status=SequenceStatus.WAITING)
+        # Ensure none of the waiting sequences already have block tables allocated.
         assert not (set(seq.seq_id for seq in waiting_seqs)
                     & self.block_tables.keys()), "block table already exists"
 
-        # NOTE: Here we assume that all sequences in the group have the same
-        # prompt.
+        # NOTE: Here we assume that all sequences in the group have the same prompt.
+        # Take the first waiting sequence as the reference for block allocation.
         seq = waiting_seqs[0]
+        # Allocate a block table for the first sequence (allocates memory blocks for its tokens).
         block_table: BlockTable = self._allocate_sequence(seq)
+        # Store the block table for this sequence in the manager's dictionary.
         self.block_tables[seq.seq_id] = block_table
 
-        # Track seq
+        # Start tracking the last access time for this sequence (for cache/eviction policies).
         self._last_access_blocks_tracker.add_seq(seq.seq_id)
 
-        # Assign the block table for each sequence.
+        # For all other waiting sequences in the group (sharing the same prompt),
+        # fork the block table (share the same blocks, but allow independent tracking).
         for seq in waiting_seqs[1:]:
             self.block_tables[seq.seq_id] = block_table.fork()
-
-            # Track seq
+            # Start tracking last access for each forked sequence as well.
             self._last_access_blocks_tracker.add_seq(seq.seq_id)
 
-        # Allocate cross-attention block table for encoder sequence
-        #
-        # NOTE: Here we assume that all sequences in the group have the same
-        # encoder prompt.
+        # Allocate cross-attention block table for encoder sequence if present (for encoder-decoder models).
+        # NOTE: Here we assume that all sequences in the group have the same encoder prompt.
         request_id = seq_group.request_id
 
+        # Ensure we haven't already allocated a cross block table for this request.
         assert (request_id
                 not in self.cross_block_tables), \
             "block table already exists"
 
+        # Perform checks related to caching or sliding window attention for encoder-decoder models.
         check_no_caching_or_swa_for_blockmgr_encdec(self, seq_group)
 
+        # If this is an encoder-decoder model, allocate a block table for the encoder sequence as well.
         if seq_group.is_encoder_decoder():
             encoder_seq = seq_group.get_encoder_seq()
             assert encoder_seq is not None

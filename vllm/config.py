@@ -1425,6 +1425,9 @@ class CacheConfig:
     enable_prefix_caching: Optional[bool] = None
     """Whether to enable prefix caching. Disabled by default for V0. Enabled by
     default for V1."""
+    caching_low_priority_last_num_tokens: int = 0
+    """The number of tokens at the end of a sequence to be considered low priority for caching.
+    Defaults to 0."""
     prefix_caching_hash_algo: PrefixCachingHashAlgo = "builtin"
     """Set the hash algorithm for prefix caching:\n
     - "builtin" is Python's built-in hash.\n

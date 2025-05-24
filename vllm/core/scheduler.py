@@ -462,6 +462,7 @@ class Scheduler:
             num_cpu_blocks=num_cpu_blocks,
             sliding_window=self.cache_config.sliding_window,
             enable_caching=self.cache_config.enable_prefix_caching,
+            caching_low_priority_last_num_tokens=self.cache_config.caching_low_priority_last_num_tokens,
         )
 
         # Sequence groups in the WAITING state.
