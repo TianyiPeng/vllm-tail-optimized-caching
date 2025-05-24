@@ -56,6 +56,11 @@ class SelfAttnBlockSpaceManager(BlockSpaceManager):
             window. Defaults to None.
         enable_caching (bool, optional): Flag indicating whether caching is
             enabled. Defaults to False.
+        max_block_sliding_window: The maximum number of blocks that can be
+            allocated for a sequence. If None, there is no limit.
+        caching_low_priority_last_num_tokens: The number of tokens at the end of a sequence
+            that should be marked as low priority for caching. These blocks will be
+            evicted first when memory pressure occurs.
     """
 
     def __init__(
@@ -66,6 +71,8 @@ class SelfAttnBlockSpaceManager(BlockSpaceManager):
         watermark: float = 0.01,
         sliding_window: Optional[int] = None,
         enable_caching: bool = False,
+        max_block_sliding_window: Optional[int] = None,
+        caching_low_priority_last_num_tokens: int = 0,
     ) -> None:
         self.block_size = block_size
         self.num_total_gpu_blocks = num_gpu_blocks
@@ -74,7 +81,7 @@ class SelfAttnBlockSpaceManager(BlockSpaceManager):
         self.sliding_window = sliding_window
         # max_block_sliding_window is the max number of blocks that need to be
         # allocated
-        self.max_block_sliding_window = None
+        self.max_block_sliding_window = max_block_sliding_window
         if sliding_window is not None:
             # +1 here because // rounds down
             num_blocks = sliding_window // block_size + 1
@@ -90,6 +97,8 @@ class SelfAttnBlockSpaceManager(BlockSpaceManager):
         self.enable_caching = enable_caching
 
         self.watermark_blocks = int(watermark * num_gpu_blocks)
+
+        self.caching_low_priority_last_num_tokens = caching_low_priority_last_num_tokens
 
         self.block_allocator = CpuGpuBlockAllocator.create(
             allocator_type="prefix_caching" if enable_caching else "naive",
@@ -290,13 +299,24 @@ class SelfAttnBlockSpaceManager(BlockSpaceManager):
 
     def access_all_blocks_in_seq(self, seq: Sequence, now: float):
         if self.enable_caching:
-            # Record the latest access time for the sequence. The actual update
-            # of the block ids is deferred to the sequence free(..) call, since
-            # only during freeing of block ids, the blocks are actually added to
-            # the evictor (which is when the most updated time is required)
-            # (This avoids expensive calls to mark_blocks_as_accessed(..))
-            self._last_access_blocks_tracker.update_last_access(
-                seq.seq_id, now)
+            # Get the block table for this sequence
+            block_table = self.block_tables[seq.seq_id]
+            block_ids = block_table.physical_block_ids
+            
+            # Calculate how many blocks should be low priority
+            num_low_priority_blocks = self.caching_low_priority_last_num_tokens // self.block_size
+            
+            # First set the base timestamp for the sequence
+            self._last_access_blocks_tracker.update_last_access(seq.seq_id, now)
+            
+            # Then update specific blocks with different timestamps
+            for i, block_id in enumerate(block_ids):
+                if i >= len(block_ids) - num_low_priority_blocks:
+                    # Use an older timestamp for the last N blocks
+                    self._last_access_blocks_tracker.update_last_access(seq.seq_id, now - 1000, block_id)
+                else:
+                    # Use current timestamp for other blocks
+                    self._last_access_blocks_tracker.update_last_access(seq.seq_id, now, block_id)
 
     def mark_blocks_as_computed(self, seq_group: SequenceGroup,
                                 token_chunk_size: int):

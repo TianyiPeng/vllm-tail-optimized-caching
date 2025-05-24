@@ -1097,34 +1097,55 @@ class LastAccessBlocksTracker:
     def __init__(self, allocator):
         self._allocator = allocator
         self._seq_last_access: Dict[int, Optional[float]] = {}
+        self._seq_block_timestamps: Dict[int, Dict[int, float]] = {}
 
     def add_seq(self, seq_id: int) -> None:
         """Start tracking seq_id
         """
         assert seq_id not in self._seq_last_access
         self._seq_last_access[seq_id] = None
+        self._seq_block_timestamps[seq_id] = {}
 
     def remove_seq(self, seq_id: int) -> None:
         """Stop tracking seq_id
         """
         assert seq_id in self._seq_last_access
         del self._seq_last_access[seq_id]
+        del self._seq_block_timestamps[seq_id]
 
-    def update_last_access(self, seq_id: int, time: float) -> None:
+    def update_last_access(self, seq_id: int, time: float, block_id: Optional[int] = None) -> None:
+        """Update the last access time for a sequence and optionally a specific block.
+        
+        Args:
+            seq_id: The sequence ID to update
+            time: The timestamp to set
+            block_id: Optional block ID to update. If None, updates the sequence's base timestamp.
+        """
         assert seq_id in self._seq_last_access
-        self._seq_last_access[seq_id] = time
+        if block_id is not None:
+            self._seq_block_timestamps[seq_id][block_id] = time
+        else:
+            self._seq_last_access[seq_id] = time
 
-    def update_seq_blocks_last_access(self, seq_id: int,
-                                      block_ids: List[int]) -> None:
+    def update_seq_blocks_last_access(self, seq_id: int, block_ids: List[int]) -> None:
+        """Update the last access time for all blocks in a sequence.
+        
+        Args:
+            seq_id: The sequence ID
+            block_ids: List of block IDs to update
+        """
         assert seq_id in self._seq_last_access
 
-        ts = self._seq_last_access[seq_id]
-
-        if ts is None:
+        # Get the base timestamp for this sequence
+        base_ts = self._seq_last_access[seq_id]
+        if base_ts is None:
             # No last access was recorded, no need to update.
             return
 
-        self._allocator.mark_blocks_as_accessed(block_ids, ts)
+        # Update each block with its specific timestamp if available, otherwise use base timestamp
+        for block_id in block_ids:
+            block_ts = self._seq_block_timestamps[seq_id].get(block_id, base_ts)
+            self._allocator.mark_blocks_as_accessed([block_id], block_ts)
 
 
 def assert_prefix_caching_block_or_none(block: Optional[Block]):
