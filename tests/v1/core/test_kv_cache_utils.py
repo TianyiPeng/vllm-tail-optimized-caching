@@ -8,6 +8,7 @@ from vllm.config import ModelConfig, SchedulerConfig, VllmConfig
 from vllm.multimodal.inputs import MultiModalKwargs, PlaceholderRange
 from vllm.sampling_params import SamplingParams
 from vllm.utils import GiB_bytes, sha256
+from vllm.v1.core.block_pool import BlockPool
 from vllm.v1.core.kv_cache_manager import KVCacheManager
 # disable yapf here as it formats differently than isort such that both fail
 # yapf: disable
@@ -651,3 +652,137 @@ def test_allocate_with_lookahead():
         num_lookahead_tokens=4,
     )
     assert len(blocks.blocks) == 2
+
+
+def test_free_kv_cache_block_queue_priority_eviction():
+    """Test that low priority blocks are inserted correctly and evicted first."""
+    # Create blocks for testing
+    blocks = [KVCacheBlock(block_id=i) for i in range(5)]
+    queue = FreeKVCacheBlockQueue(blocks)
+    
+    # Initially, all blocks are unhashed and last_low_priority_cached_block points to tail
+    assert queue.last_low_priority_cached_block == blocks[4]  # tail
+    
+    # Pop all blocks to simulate allocation
+    allocated_blocks = []
+    for _ in range(5):
+        allocated_blocks.append(queue.popleft())
+    assert queue.num_free_blocks == 0
+    
+    # Now simulate freeing blocks with different priorities
+    # Block 0: unhashed block (should be evicted first)
+    allocated_blocks[0].block_hash = None
+    allocated_blocks[0].low_priority = True  # unhashed blocks are treated as low priority
+    queue.append(allocated_blocks[0])
+    
+    # Block 1: low priority cached block  
+    allocated_blocks[1].block_hash = hash_block_tokens(hash, None, (4, 5, 6))
+    allocated_blocks[1].low_priority = True
+    queue.append(allocated_blocks[1])
+    
+    # Block 2: another low priority cached block
+    allocated_blocks[2].block_hash = hash_block_tokens(hash, None, (7, 8, 9))
+    allocated_blocks[2].low_priority = True
+    queue.append(allocated_blocks[2])
+    
+    # Block 3: high priority cached block
+    allocated_blocks[3].block_hash = hash_block_tokens(hash, None, (10, 11, 12))
+    allocated_blocks[3].low_priority = False
+    queue.append(allocated_blocks[3])
+    
+    # Block 4: another high priority cached block
+    allocated_blocks[4].block_hash = hash_block_tokens(hash, None, (13, 14, 15))
+    allocated_blocks[4].low_priority = False
+    queue.append(allocated_blocks[4])
+    
+    # Verify the queue order: unhashed -> low priority cached -> high priority cached
+    all_blocks = queue.get_all_free_blocks()
+    assert len(all_blocks) == 5
+    
+    # Check that blocks are in correct order for eviction
+    # First should be unhashed (block 0)
+    assert all_blocks[0].block_id == 0
+    assert all_blocks[0].block_hash is None
+    
+    # Next should be low priority cached blocks (blocks 1, 2)
+    low_priority_block_ids = {all_blocks[1].block_id, all_blocks[2].block_id}
+    assert low_priority_block_ids == {1, 2}
+    assert all_blocks[1].low_priority == True
+    assert all_blocks[2].low_priority == True
+    
+    # Last should be high priority cached blocks (blocks 3, 4)  
+    high_priority_block_ids = {all_blocks[3].block_id, all_blocks[4].block_id}
+    assert high_priority_block_ids == {3, 4}
+    assert all_blocks[3].low_priority == False
+    assert all_blocks[4].low_priority == False
+    
+    # Verify eviction order: unhashed first
+    evicted_1 = queue.popleft()
+    assert evicted_1.block_id == 0
+    assert evicted_1.block_hash is None
+    
+    # Then low priority blocks
+    evicted_2 = queue.popleft()  
+    assert evicted_2.low_priority == True
+    assert evicted_2.block_hash is not None
+    
+    evicted_3 = queue.popleft()
+    assert evicted_3.low_priority == True  
+    assert evicted_3.block_hash is not None
+    
+    # Finally high priority blocks
+    evicted_4 = queue.popleft()
+    assert evicted_4.low_priority == False
+    assert evicted_4.block_hash is not None
+    
+    evicted_5 = queue.popleft()
+    assert evicted_5.low_priority == False
+    assert evicted_5.block_hash is not None
+
+
+def test_low_priority_block_pool_integration():
+    """Test the full integration with BlockPool and low priority policy."""
+    # Create BlockPool with low priority policy enabled
+    block_pool = BlockPool(
+        num_gpu_blocks=5, 
+        enable_caching=True,
+        caching_low_priority_last_num_tokens=32  # 2 blocks if block_size=16
+    )
+    
+    # Get some blocks and simulate caching with different priorities
+    blocks = []
+    for _ in range(4):
+        blocks.append(block_pool.get_new_blocks(1)[0])
+    
+    # Set up blocks as if from a request: first blocks are high priority, last are low priority
+    blocks[0].block_hash = hash_block_tokens(hash, None, (1, 2, 3))  
+    blocks[0].low_priority = False  # From beginning of request
+    
+    blocks[1].block_hash = hash_block_tokens(hash, None, (4, 5, 6))
+    blocks[1].low_priority = False  # From beginning of request
+    
+    blocks[2].block_hash = hash_block_tokens(hash, None, (7, 8, 9))
+    blocks[2].low_priority = True   # From end of request (last tokens)
+    
+    blocks[3].block_hash = hash_block_tokens(hash, None, (10, 11, 12))
+    blocks[3].low_priority = True   # From end of request (last tokens)
+    
+    # Free the blocks (simulate request completion)
+    # Reverse order as mentioned in the original design
+    block_pool.free_blocks(reversed(blocks))
+    
+    # Verify eviction order: low priority blocks should be evicted first
+    evicted_first = block_pool.get_new_blocks(1)[0]
+    assert evicted_first in [blocks[2], blocks[3]]  # Should be a low priority block
+    
+    evicted_second = block_pool.get_new_blocks(1)[0]  
+    assert evicted_second in [blocks[2], blocks[3]]  # Should be the other low priority block
+    assert evicted_second != evicted_first
+    
+    # Then high priority blocks
+    evicted_third = block_pool.get_new_blocks(1)[0]
+    assert evicted_third in [blocks[0], blocks[1]]  # Should be a high priority block
+    
+    evicted_fourth = block_pool.get_new_blocks(1)[0]
+    assert evicted_fourth in [blocks[0], blocks[1]]  # Should be the other high priority block  
+    assert evicted_fourth != evicted_third

@@ -61,6 +61,7 @@ class KVCacheManager:
         use_eagle: bool = False,
         log_stats: bool = False,
         enable_kv_cache_events: bool = False,
+        caching_low_priority_last_num_tokens: int = 0,
     ) -> None:
         assert len(kv_cache_config.kv_cache_groups) == 1, (
             "KVCacheManager does not support hybrid models with more than 1 "
@@ -77,8 +78,12 @@ class KVCacheManager:
         # FIXME: make prefix cache stats conditional on log_stats
         self.prefix_cache_stats = PrefixCacheStats() if log_stats else None
 
-        self.block_pool = BlockPool(self.num_gpu_blocks, enable_caching,
-                                    enable_kv_cache_events)
+        self.block_pool = BlockPool(
+            self.num_gpu_blocks, 
+            enable_caching,
+            enable_kv_cache_events,
+            caching_low_priority_last_num_tokens
+        )
 
         self.single_type_manager = get_manager_for_kv_cache_spec(
             kv_cache_spec=kv_cache_spec,

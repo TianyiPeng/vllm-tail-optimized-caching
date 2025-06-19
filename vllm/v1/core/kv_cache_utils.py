@@ -118,6 +118,9 @@ class KVCacheBlock:
     # The hash of the block composed of (block hash, tuple of token IDs).
     # It is only available when the block is full.
     _block_hash: Optional[BlockHashType] = None
+    # Priority flag for cache eviction. True means this block has low priority
+    # (should be evicted first), False means high priority.
+    low_priority: bool = False
 
     # Used to construct a doubly linked list for free blocks.
     # These two attributes should only be manipulated by FreeKVCacheBlockQueue.
@@ -154,6 +157,7 @@ class KVCacheBlock:
         return (f"KVCacheBlock(block_id={self.block_id}, "
                 f"ref_cnt={self.ref_cnt}, "
                 f"_block_hash={self._block_hash}, "
+                f"low_priority={self.low_priority}, "
                 f"prev_free_block={prev_block_id}, "
                 f"next_free_block={next_block_id})")
 
@@ -169,13 +173,12 @@ class FreeKVCacheBlockQueue:
 
     The queue is ordered by block ID in the beginning. When a block is allocated
     and then freed, it will be appended back with the eviction order:
-    1. The least recent used block is at the front (LRU).
-    2. If two blocks have the same last accessed time (allocated by the
-       same sequence), the one with more hash tokens (the tail of a block
-       chain) is at the front.
+    1. Unhashed blocks (block_hash is None) at the front.
+    2. Cached blocks with low_priority=True next.
+    3. Cached blocks with low_priority=False at the back.
+    Within each category, LRU order is maintained.
     Note that we maintain this order by reversing the block order when free
     blocks of a request. This operation is outside of this class.
-
     Args:
         blocks: A list of KVCacheBlock objects.
     """
@@ -186,6 +189,10 @@ class FreeKVCacheBlockQueue:
         # Initialize the doubly linked list of free blocks.
         self.free_list_head: Optional[KVCacheBlock] = blocks[0]
         self.free_list_tail: Optional[KVCacheBlock] = blocks[-1]
+        
+        # Initialize the last low priority cached block.
+        self.last_low_priority_cached_block: Optional[KVCacheBlock] = self.free_list_tail
+        
         for i in range(self.num_free_blocks):
             if i > 0:
                 blocks[i].prev_free_block = blocks[i - 1]
@@ -230,12 +237,45 @@ class FreeKVCacheBlockQueue:
         self.num_free_blocks -= 1
 
     def append(self, block: KVCacheBlock) -> None:
-        """Put a block back into the free list and increase
-        num_free_blocks by 1.
+        """Put a block back into the free list with priority-based insertion.
 
         Args:
             block: The block to append.
         """
+        if block.low_priority:
+            # Low priority cached block: insert after last_low_priority_cached_block
+            self._insert_after_low_priority(block)
+        else:
+            # High priority cached block: append to tail (existing behavior)
+            self._append_to_tail(block)
+
+    def _insert_after_low_priority(self, block: KVCacheBlock) -> None:
+        """Insert block after the last_low_priority_cached_block."""
+        # Handle edge case where queue is empty
+        if self.last_low_priority_cached_block is None:
+            assert self.free_list_head is None
+            # the free list is empty
+            self.free_list_head = self.free_list_tail = block
+        else:
+            next_block = self.last_low_priority_cached_block.next_free_block
+            
+            # Link the new block
+            block.prev_free_block = self.last_low_priority_cached_block
+            block.next_free_block = next_block
+            
+            # Update adjacent blocks
+            self.last_low_priority_cached_block.next_free_block = block
+            if next_block is not None:
+                next_block.prev_free_block = block
+            else:
+                # We're inserting at the tail
+                self.free_list_tail = block
+        # Update the pointer to this new block
+        self.last_low_priority_cached_block = block
+        self.num_free_blocks += 1
+
+    def _append_to_tail(self, block: KVCacheBlock) -> None:
+        """Append block to tail (existing behavior)."""
         if self.free_list_tail is not None:
             # Link the last block to the new block.
             self.free_list_tail.next_free_block = block

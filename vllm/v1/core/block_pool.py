@@ -26,6 +26,8 @@ class BlockPool:
     Args:
         num_gpu_blocks: The number of blocks in the pool.
         enable_caching: Whether to enable prefix caching.
+        caching_low_priority_last_num_tokens: Number of tokens at the end of
+            each request that should have low priority for cache eviction.
     """
 
     def __init__(
@@ -33,10 +35,12 @@ class BlockPool:
         num_gpu_blocks: int,
         enable_caching: bool,
         enable_kv_cache_events: bool = False,
+        caching_low_priority_last_num_tokens: int = 0,
     ):
         assert isinstance(num_gpu_blocks, int) and num_gpu_blocks > 0
         self.num_gpu_blocks = num_gpu_blocks
         self.enable_caching = enable_caching
+        self.caching_low_priority_last_num_tokens = caching_low_priority_last_num_tokens
         # All kv-cache blocks.
         self.blocks: list[KVCacheBlock] = [
             KVCacheBlock(idx) for idx in range(num_gpu_blocks)

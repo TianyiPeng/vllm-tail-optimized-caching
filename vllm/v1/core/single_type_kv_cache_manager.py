@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+import math
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import Callable
@@ -162,6 +163,19 @@ class SingleTypeKVCacheManager(ABC):
     def free(self, request_id: str) -> None:
         # Default to [] in case a request is freed (aborted) before alloc.
         req_blocks = self.req_to_blocks.pop(request_id, [])
+
+        if req_blocks and self.block_pool.caching_low_priority_last_num_tokens > 0:
+            # Calculate how many blocks correspond to the last N tokens
+            num_low_priority_blocks = math.ceil(
+                self.block_pool.caching_low_priority_last_num_tokens / self.block_size
+            )
+            
+            # Set priority flags: last blocks have low priority
+            for i, block in enumerate(req_blocks):
+                if i >= len(req_blocks) - num_low_priority_blocks:
+                    block.low_priority = True
+                else:
+                    block.low_priority = False
 
         # Free blocks in reverse order so that the tail blocks are
         # freed first.
