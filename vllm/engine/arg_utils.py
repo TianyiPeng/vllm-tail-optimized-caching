@@ -412,6 +412,7 @@ class EngineArgs:
     model_impl: str = ModelConfig.model_impl
 
     calculate_kv_scales: bool = CacheConfig.calculate_kv_scales
+    caching_low_priority_last_num_tokens: int = CacheConfig.caching_low_priority_last_num_tokens
 
     additional_config: Optional[Dict[str, Any]] = None
     enable_reasoning: Optional[bool] = None  # DEPRECATED
@@ -657,6 +658,8 @@ class EngineArgs:
                                  **cache_kwargs["cpu_offload_gb"])
         cache_group.add_argument("--calculate-kv-scales",
                                  **cache_kwargs["calculate_kv_scales"])
+        cache_group.add_argument("--caching-low-priority-last-num-tokens",
+                                 **cache_kwargs["caching_low_priority_last_num_tokens"])
 
         # Tokenizer arguments
         tokenizer_kwargs = get_kwargs(TokenizerPoolConfig)
@@ -1030,6 +1033,7 @@ class EngineArgs:
             prefix_caching_hash_algo=self.prefix_caching_hash_algo,
             cpu_offload_gb=self.cpu_offload_gb,
             calculate_kv_scales=self.calculate_kv_scales,
+            caching_low_priority_last_num_tokens=self.caching_low_priority_last_num_tokens,
         )
 
         # Get the current placement group if Ray is initialized and

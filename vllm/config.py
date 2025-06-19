@@ -1442,6 +1442,10 @@ class CacheConfig:
     """This enables dynamic calculation of `k_scale` and `v_scale` when
     kv_cache_dtype is fp8. If `False`, the scales will be loaded from the model
     checkpoint if available. Otherwise, the scales will default to 1.0."""
+    caching_low_priority_last_num_tokens: int = 0
+    """Number of tokens at the end of each request that should have low priority
+    for cache eviction. When set to a value > 0, the last N tokens of each request
+    will be marked as low priority and evicted before other cached blocks."""
 
     # Will be set after profiling.
     num_gpu_blocks: Optional[int] = field(default=None, init=False)
@@ -4479,9 +4483,9 @@ class VllmConfig:
             f"seed={self.model_config.seed}, "
             f"served_model_name={self.model_config.served_model_name}, "
             f"num_scheduler_steps={self.scheduler_config.num_scheduler_steps}, "
-            f"multi_step_stream_outputs={self.scheduler_config.multi_step_stream_outputs}, "  # noqa
-            f"enable_prefix_caching={self.cache_config.enable_prefix_caching}, "
-            f"chunked_prefill_enabled={self.scheduler_config.chunked_prefill_enabled}, "  # noqa
+                         f"multi_step_stream_outputs={self.scheduler_config.multi_step_stream_outputs}, "  # noqa
+             f"enable_prefix_caching={self.cache_config.enable_prefix_caching}, "
+             f"chunked_prefill_enabled={self.scheduler_config.chunked_prefill_enabled}, "  # noqa
             f"use_async_output_proc={self.model_config.use_async_output_proc}, "
             f"pooler_config={self.model_config.pooler_config!r}, "
             f"compilation_config={self.compilation_config!r}")
