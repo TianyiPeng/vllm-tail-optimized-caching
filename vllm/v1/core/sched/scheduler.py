@@ -146,6 +146,7 @@ class Scheduler(SchedulerInterface):
             use_eagle=self.use_eagle,
             log_stats=self.log_stats,
             enable_kv_cache_events=self.enable_kv_cache_events,
+            caching_low_priority_last_num_tokens=self.cache_config.caching_low_priority_last_num_tokens,
         )
 
     def schedule(self) -> SchedulerOutput:
