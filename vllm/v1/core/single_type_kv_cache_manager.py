@@ -164,6 +164,11 @@ class SingleTypeKVCacheManager(ABC):
         # Default to [] in case a request is freed (aborted) before alloc.
         req_blocks = self.req_to_blocks.pop(request_id, [])
 
+        print(f"\n=== FREEING REQUEST {request_id} ===")
+        print(f"Number of blocks to free: {len(req_blocks)}")
+        print(f"caching_low_priority_last_num_tokens: {self.block_pool.caching_low_priority_last_num_tokens}")
+        print(f"Condition check: req_blocks={bool(req_blocks)}, caching_setting={self.block_pool.caching_low_priority_last_num_tokens > 0}")
+
         if req_blocks and self.block_pool.caching_low_priority_last_num_tokens > 0:
             # Calculate how many blocks correspond to the last N tokens
             num_low_priority_blocks = math.ceil(
@@ -186,6 +191,8 @@ class SingleTypeKVCacheManager(ABC):
             print(f"Low priority blocks assigned: {low_priority_count}")
             print(f"High priority blocks assigned: {high_priority_count}")
             print(f"=== PRIORITY ASSIGNMENT COMPLETE ===\n")
+        else:
+            print(f"Priority assignment SKIPPED - all blocks will be treated as high priority")
 
         # Free blocks in reverse order so that the tail blocks are
         # freed first.
