@@ -164,10 +164,10 @@ class SingleTypeKVCacheManager(ABC):
         # Default to [] in case a request is freed (aborted) before alloc.
         req_blocks = self.req_to_blocks.pop(request_id, [])
 
-        print(f"\n=== FREEING REQUEST {request_id} ===")
-        print(f"Number of blocks to free: {len(req_blocks)}")
-        print(f"caching_low_priority_last_num_tokens: {self.block_pool.caching_low_priority_last_num_tokens}")
-        print(f"Condition check: req_blocks={bool(req_blocks)}, caching_setting={self.block_pool.caching_low_priority_last_num_tokens > 0}")
+        # print(f"\n=== FREEING REQUEST {request_id} ===")
+        # print(f"Number of blocks to free: {len(req_blocks)}")
+        # print(f"caching_low_priority_last_num_tokens: {self.block_pool.caching_low_priority_last_num_tokens}")
+        # print(f"Condition check: req_blocks={bool(req_blocks)}, caching_setting={self.block_pool.caching_low_priority_last_num_tokens > 0}")
 
         if req_blocks and self.block_pool.caching_low_priority_last_num_tokens > 0:
             # Calculate how many blocks correspond to the last N tokens
@@ -176,23 +176,24 @@ class SingleTypeKVCacheManager(ABC):
             )
             
             # Set priority flags: last blocks have low priority
-            low_priority_count = 0
-            high_priority_count = 0
+            #low_priority_count = 0
+            #high_priority_count = 0
             for i, block in enumerate(req_blocks):
                 if i >= len(req_blocks) - num_low_priority_blocks:
                     block.low_priority = True
-                    low_priority_count += 1
+                    #low_priority_count += 1
                 else:
                     block.low_priority = False
-                    high_priority_count += 1
+                    #high_priority_count += 1
             
-            print(f"\n=== ASSIGNING BLOCK PRIORITIES ===")
-            print(f"Request {request_id}: {len(req_blocks)} blocks total")
-            print(f"Low priority blocks assigned: {low_priority_count}")
-            print(f"High priority blocks assigned: {high_priority_count}")
-            print(f"=== PRIORITY ASSIGNMENT COMPLETE ===\n")
+            # print(f"\n=== ASSIGNING BLOCK PRIORITIES ===")
+            # print(f"Request {request_id}: {len(req_blocks)} blocks total")
+            # print(f"Low priority blocks assigned: {low_priority_count}")
+            # print(f"High priority blocks assigned: {high_priority_count}")
+            # print(f"=== PRIORITY ASSIGNMENT COMPLETE ===\n")
         else:
-            print(f"Priority assignment SKIPPED - all blocks will be treated as high priority")
+            # print(f"Priority assignment SKIPPED - all blocks will be treated as high priority")
+            pass
 
         # Free blocks in reverse order so that the tail blocks are
         # freed first.

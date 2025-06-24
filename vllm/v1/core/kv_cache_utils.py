@@ -255,28 +255,28 @@ class FreeKVCacheBlockQueue:
 
     def _insert_low_priority_block(self, block: KVCacheBlock) -> None:
         """Insert a low priority block based on the current state."""
-        print(f"\n=== INSERTING LOW PRIORITY BLOCK {block.block_id} ===")
-        print(f"Before insertion - Queue state (last 10 blocks):")
-        self._print_queue_state()
+        # print(f"\n=== INSERTING LOW PRIORITY BLOCK {block.block_id} ===")
+        # print(f"Before insertion - Queue state (last 10 blocks):")
+        # self._print_queue_state()
         
         if self.last_low_priority_cached_block is None:
-            print(f"last_low_priority_cached_block is None")
+            # print(f"last_low_priority_cached_block is None")
             # No insertion point
             if self.free_list_tail is None:
                 assert self.free_list_head is None
-                print("Case 1: Queue is empty - setting as both head and tail")
+                # print("Case 1: Queue is empty - setting as both head and tail")
                 # Case 1: Queue is empty
                 self.free_list_head = self.free_list_tail = block
                 block.prev_free_block = block.next_free_block = None
             else:
-                print("Case 2: Queue is non-empty - inserting at head")
+                # print("Case 2: Queue is non-empty - inserting at head")
                 # Case 2: Queue is non-empty, insert at head
                 block.next_free_block = self.free_list_head
                 block.prev_free_block = None
                 self.free_list_head.prev_free_block = block
                 self.free_list_head = block
         else:
-            print(f"Normal case: Inserting after last_low_priority_cached_block (block {self.last_low_priority_cached_block.block_id})")
+            # print(f"Normal case: Inserting after last_low_priority_cached_block (block {self.last_low_priority_cached_block.block_id})")
             # Normal case: Insert after last_low_priority_cached_block
             next_block = self.last_low_priority_cached_block.next_free_block
             
@@ -287,25 +287,25 @@ class FreeKVCacheBlockQueue:
             # Update adjacent blocks
             self.last_low_priority_cached_block.next_free_block = block
             if next_block is not None:
-                print(f"Inserting between block {self.last_low_priority_cached_block.block_id} and block {next_block.block_id}")
+                # print(f"Inserting between block {self.last_low_priority_cached_block.block_id} and block {next_block.block_id}")
                 next_block.prev_free_block = block
             else:
-                print(f"Inserting at the tail after block {self.last_low_priority_cached_block.block_id}")
+                # print(f"Inserting at the tail after block {self.last_low_priority_cached_block.block_id}")
                 # We're inserting at the tail
                 self.free_list_tail = block
         # Update the pointer to this new block
         self.last_low_priority_cached_block = block
         self.num_free_blocks += 1
         
-        print(f"After insertion - Queue state:")
-        self._print_queue_state()
-        print(f"=== INSERTION COMPLETE ===\n")
+        # print(f"After insertion - Queue state:")
+        # self._print_queue_state()
+        # print(f"=== INSERTION COMPLETE ===\n")
 
     def _append_to_tail(self, block: KVCacheBlock) -> None:
         """Append block to tail (existing behavior)."""
-        print(f"\n=== APPENDING HIGH PRIORITY BLOCK {block.block_id} TO TAIL ===")
-        print(f"Before append - Queue state (last 10 blocks):")
-        self._print_queue_state()
+        # print(f"\n=== APPENDING HIGH PRIORITY BLOCK {block.block_id} TO TAIL ===")
+        # print(f"Before append - Queue state (last 10 blocks):")
+        # self._print_queue_state()
         
         if self.free_list_tail is not None:
             # Link the last block to the new block.
@@ -320,9 +320,9 @@ class FreeKVCacheBlockQueue:
         block.next_free_block = None
         self.num_free_blocks += 1
         
-        print(f"After append - Queue state (last 10 blocks):")
-        self._print_queue_state()
-        print(f"=== APPEND COMPLETE ===\n")
+        # print(f"After append - Queue state (last 10 blocks):")
+        # self._print_queue_state()
+        # print(f"=== APPEND COMPLETE ===\n")
 
     def _print_queue_state(self) -> None:
         """Print the current state of the queue for debugging."""

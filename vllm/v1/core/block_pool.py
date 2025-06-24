@@ -252,21 +252,21 @@ class BlockPool:
         Args:
             blocks: A list of blocks to touch.
         """
-        removed_blocks = []
+        #removed_blocks = []
         for block in blocks:
             # ref_cnt=0 means this block is in the free list (i.e. eviction
             # candidate), so remove it.
             if block.ref_cnt == 0 and block != self.null_block:
-                removed_blocks.append(block.block_id)
+                #removed_blocks.append(block.block_id)
                 self.free_block_queue.remove(block)
             block.incr_ref()
-        
-        if removed_blocks:
-            print(f"\n=== CACHE HIT: REMOVED BLOCKS FROM FREE QUEUE ===")
-            print(f"Removed blocks (due to cache hit): {removed_blocks}")
-            print(f"Queue state after cache hit removal:")
-            self.free_block_queue._print_queue_state()
-            print(f"=== CACHE HIT COMPLETE ===\n")
+        # debugging code to check if blocks removed from free queue due to cache hit
+        # if removed_blocks:
+        #     print(f"\n=== CACHE HIT: REMOVED BLOCKS FROM FREE QUEUE ===")
+        #     print(f"Removed blocks (due to cache hit): {removed_blocks}")
+        #     print(f"Queue state after cache hit removal:")
+        #     self.free_block_queue._print_queue_state()
+        #     print(f"=== CACHE HIT COMPLETE ===\n")
 
     def free_blocks(self, ordered_blocks: Iterable[KVCacheBlock]) -> None:
         """Free a list of blocks. The blocks should be ordered by their
