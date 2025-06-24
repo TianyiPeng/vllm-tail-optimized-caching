@@ -19,13 +19,18 @@ def test_queue_operations():
     print("TESTING KV CACHE QUEUE OPERATIONS")
     print("=" * 60)
     
-    # Test 1: Start with empty queue
+    # Test 1: Start with a queue with some initial unhashed blocks
     print("\n" + "="*40)
-    print("TEST 1: Empty queue initialization")
+    print("TEST 1: Initialize queue with unhashed blocks")
     print("="*40)
     
-    queue = FreeKVCacheBlockQueue([])
-    print("Initialized empty queue:")
+    # Create some initial unhashed blocks like vllm does in practice
+    initial_blocks = [
+        FreeKVCacheBlockQueue.create_test_block(i, is_cached=False) 
+        for i in range(3)
+    ]
+    queue = FreeKVCacheBlockQueue(initial_blocks)
+    print("Initialized queue with unhashed blocks:")
     queue._print_queue_state()
     
     # Test 2: Insert low priority block into empty queue
@@ -83,6 +88,37 @@ def test_queue_operations():
     low_block_4 = FreeKVCacheBlockQueue.create_test_block(103, is_cached=True, low_priority=True)
     queue.append(low_block_4)
 
+def test_empty_queue_scenario():
+    """Test what happens when queue becomes empty during operation."""
+    
+    print("\n" + "="*60)
+    print("TESTING EMPTY QUEUE SCENARIO")
+    print("="*60)
+    
+    # Start with a small queue
+    initial_blocks = [FreeKVCacheBlockQueue.create_test_block(i, is_cached=False) for i in range(2)]
+    queue = FreeKVCacheBlockQueue(initial_blocks)
+    
+    print("Initial state:")
+    queue._print_queue_state()
+    
+    # Remove all blocks to make it empty
+    print("\n" + "-"*40)
+    print("Removing all blocks to make queue empty:")
+    print("-"*40)
+    
+    while queue.num_free_blocks > 0:
+        removed = queue.popleft()
+        print(f"Removed block {removed.block_id}")
+    
+    # Now add a low priority block to empty queue
+    print("\n" + "-"*40)
+    print("Adding low priority block to empty queue:")
+    print("-"*40)
+    
+    low_block = FreeKVCacheBlockQueue.create_test_block(100, is_cached=True, low_priority=True)
+    queue.append(low_block)
+
 def test_with_initial_blocks():
     """Test with initial unhashed blocks."""
     
@@ -129,6 +165,7 @@ def test_with_initial_blocks():
 
 if __name__ == "__main__":
     test_queue_operations()
+    test_empty_queue_scenario()
     test_with_initial_blocks()
     print("\n" + "="*60)
     print("ALL TESTS COMPLETED")

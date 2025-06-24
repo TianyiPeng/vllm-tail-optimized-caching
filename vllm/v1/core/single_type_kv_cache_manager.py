@@ -171,11 +171,21 @@ class SingleTypeKVCacheManager(ABC):
             )
             
             # Set priority flags: last blocks have low priority
+            low_priority_count = 0
+            high_priority_count = 0
             for i, block in enumerate(req_blocks):
                 if i >= len(req_blocks) - num_low_priority_blocks:
                     block.low_priority = True
+                    low_priority_count += 1
                 else:
                     block.low_priority = False
+                    high_priority_count += 1
+            
+            print(f"\n=== ASSIGNING BLOCK PRIORITIES ===")
+            print(f"Request {request_id}: {len(req_blocks)} blocks total")
+            print(f"Low priority blocks assigned: {low_priority_count}")
+            print(f"High priority blocks assigned: {high_priority_count}")
+            print(f"=== PRIORITY ASSIGNMENT COMPLETE ===\n")
 
         # Free blocks in reverse order so that the tail blocks are
         # freed first.

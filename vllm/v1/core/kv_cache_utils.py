@@ -218,13 +218,8 @@ class FreeKVCacheBlockQueue:
         Args:
             block: The block to remove.
         """
-        print(f"\n=== REMOVING BLOCK {block.block_id} ===")
-        print(f"Before removal - Queue state:")
-        self._print_queue_state()
-        
         # Check if we're removing the block that last_low_priority_cached_block points to
         if block == self.last_low_priority_cached_block:
-            print(f"Removing the last_low_priority_cached_block! Setting pointer to None.")
             self.last_low_priority_cached_block = None
         
         if block.prev_free_block is not None:
@@ -244,10 +239,6 @@ class FreeKVCacheBlockQueue:
         # Remove the block from the linked list.
         block.prev_free_block = block.next_free_block = None
         self.num_free_blocks -= 1
-        
-        print(f"After removal - Queue state:")
-        self._print_queue_state()
-        print(f"=== REMOVAL COMPLETE ===\n")
 
     def append(self, block: KVCacheBlock) -> None:
         """Put a block back into the free list with priority-based insertion.
@@ -265,7 +256,7 @@ class FreeKVCacheBlockQueue:
     def _insert_low_priority_block(self, block: KVCacheBlock) -> None:
         """Insert a low priority block based on the current state."""
         print(f"\n=== INSERTING LOW PRIORITY BLOCK {block.block_id} ===")
-        print(f"Before insertion - Queue state:")
+        print(f"Before insertion - Queue state (last 10 blocks):")
         self._print_queue_state()
         
         if self.last_low_priority_cached_block is None:
@@ -313,7 +304,7 @@ class FreeKVCacheBlockQueue:
     def _append_to_tail(self, block: KVCacheBlock) -> None:
         """Append block to tail (existing behavior)."""
         print(f"\n=== APPENDING HIGH PRIORITY BLOCK {block.block_id} TO TAIL ===")
-        print(f"Before append - Queue state:")
+        print(f"Before append - Queue state (last 10 blocks):")
         self._print_queue_state()
         
         if self.free_list_tail is not None:
@@ -329,7 +320,7 @@ class FreeKVCacheBlockQueue:
         block.next_free_block = None
         self.num_free_blocks += 1
         
-        print(f"After append - Queue state:")
+        print(f"After append - Queue state (last 10 blocks):")
         self._print_queue_state()
         print(f"=== APPEND COMPLETE ===\n")
 
@@ -343,23 +334,38 @@ class FreeKVCacheBlockQueue:
         else:
             print(f"  last_low_priority_cached_block: block {self.last_low_priority_cached_block.block_id}")
         
-        # Print the queue from head to tail
+        # Count priority blocks and collect all blocks
         blocks = []
+        unhashed_count = 0
+        low_priority_count = 0
+        high_priority_count = 0
+        
         curr_block = self.free_list_head
         while curr_block is not None:
-            # Determine block type
+            # Determine block type and count
             if curr_block.block_hash is None:
                 block_type = "unhashed"
+                unhashed_count += 1
             elif curr_block.low_priority:
                 block_type = "low_priority"
+                low_priority_count += 1
             else:
                 block_type = "high_priority"
+                high_priority_count += 1
             
             blocks.append(f"block_{curr_block.block_id}({block_type})")
             curr_block = curr_block.next_free_block
         
+        # Print priority counts
+        print(f"  Block counts - Unhashed: {unhashed_count}, Low Priority: {low_priority_count}, High Priority: {high_priority_count}")
+        
+        # Only show last 10 blocks
         if blocks:
-            print(f"  Queue (head->tail): {' -> '.join(blocks)}")
+            if len(blocks) <= 10:
+                print(f"  Queue (head->tail): {' -> '.join(blocks)}")
+            else:
+                last_10_blocks = blocks[-10:]
+                print(f"  Queue (last 10 blocks): ...{' -> '.join(last_10_blocks)}")
         else:
             print(f"  Queue: EMPTY")
 
