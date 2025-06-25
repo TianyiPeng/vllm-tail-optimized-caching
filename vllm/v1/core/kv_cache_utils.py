@@ -210,16 +210,14 @@ class FreeKVCacheBlockQueue:
         if not self.low_priority_free_list_head and not self.high_priority_free_list_head:
             raise ValueError("No free blocks available")
 
-        if self.low_priority_free_list_head:
-            block = self.low_priority_free_list_head
-            self.remove(block, low_priority_queue=True)
-        else:
+        block = self.low_priority_free_list_head
+        if block is None:
             block = self.high_priority_free_list_head
-            self.remove(block, low_priority_queue=False)
 
+        self.remove(block)
         return block
 
-    def remove(self, block: KVCacheBlock, low_priority_queue: bool) -> None:
+    def remove(self, block: KVCacheBlock) -> None:
         """Remove a block in the free list and reduce num_free_blocks by 1.
 
         Args:
@@ -231,22 +229,21 @@ class FreeKVCacheBlockQueue:
         if block.next_free_block is not None:
             # Link the next block to the previous block.
             block.next_free_block.prev_free_block = block.prev_free_block
-
-        if low_priority_queue:
-            if block == self.low_priority_free_list_head:
-                # Update the head if the block is the head.
-                self.low_priority_free_list_head = block.next_free_block
-            if block == self.low_priority_free_list_tail:
-                # Update the tail if the block is the tail.
-                self.low_priority_free_list_tail = block.prev_free_block
-        else:
-            if block == self.high_priority_free_list_head:
-                # Update the head if the block is the head.
-                self.high_priority_free_list_head = block.next_free_block
-            if block == self.high_priority_free_list_tail:
-                # Update the tail if the block is the tail.
-                self.high_priority_free_list_tail = block.prev_free_block
-
+        
+        if block == self.low_priority_free_list_head:
+            # Update the head if the block is the head.
+            self.low_priority_free_list_head = block.next_free_block
+        if block == self.low_priority_free_list_tail:
+            # Update the tail if the block is the tail.
+            self.low_priority_free_list_tail = block.prev_free_block
+        
+        if block == self.high_priority_free_list_head:
+            # Update the head if the block is the head.
+            self.high_priority_free_list_head = block.next_free_block
+        if block == self.high_priority_free_list_tail:
+            # Update the tail if the block is the tail.
+            self.high_priority_free_list_tail = block.prev_free_block
+        
         # Remove the block from the linked list.
         block.prev_free_block = block.next_free_block = None
         self.num_free_blocks -= 1
